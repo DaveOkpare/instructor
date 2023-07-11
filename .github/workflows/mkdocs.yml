@@ -19,6 +19,9 @@ jobs:
       - name: Deploy MkDocs
         uses: mhausenblas/mkdocs-deploy-gh-pages@1.26
       
+      - name: Install Pillow and CairoSVG
+        run: pip install pillow cairosvg
+      
       - name: Install dependencies
         run: pip install -r requirements-doc.txt
       
