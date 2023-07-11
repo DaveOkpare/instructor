@@ -14,17 +14,19 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
-      
+        uses: actions/checkout@v3
+        
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.x
+
       - name: Install Pillow and CairoSVG
         run: pip install pillow cairosvg
       
       - name: Install dependencies
         run: pip install -r requirements-doc.txt
       
-      - name: Deploy MkDocs
-        uses: mhausenblas/mkdocs-deploy-gh-pages@1.26
-      
       - name: Build and deploy MkDocs
-        run: |
-          mkdocs gh-deploy
+        run: mkdocs gh-deploy --verbose
+  
