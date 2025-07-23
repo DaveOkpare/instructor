@@ -379,7 +379,7 @@ Instructor makes it easy to analyse and extract semantic information from PDFs u
 
 Let's see an example below with the sample PDF above where we'll load it in using our `from_url` method. With this integration that we're passing in the raw bytes to gemini itself, we also support using the Files api with the `PDFWithGenaiFile` class.
 
-Note that we support local files and base64 strings using this method too with the `from_path` and the `from_base64` class methods.
+Note that we support local files, base64 strings, and Google Cloud Storage URIs (`gs://`) using this method too with the `from_path`, `from_base64`, and `from_url` class methods respectively.
 
 ```python
 from instructor.processing.multimodal import PDF
@@ -405,11 +405,13 @@ response = client.chat.completions.create(
                 "Extract out the total and line items from the invoice",
                 # Option 1: Direct URL
                 PDF.from_url(url),
-                # Option 2: Local file
+                # Option 2: GCS URI
+                # PDF.from_url("gs://bucket-name/path/to/file.pdf"),
+                # Option 3: Local file
                 # PDF.from_path("path/to/local/invoice.pdf"),
-                # Option 3: Base64 string
-                # PDF.from_base64("base64_encoded_string_here")
-                # Option 4: Autodetect
+                # Option 4: Base64 string
+                # PDF.from_base64("base64_encoded_string_here"),
+                # Option 5: Autodetect
                 # PDF.autodetect(<url|path|base64>)
             ],
         },
