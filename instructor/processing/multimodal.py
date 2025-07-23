@@ -294,22 +294,29 @@ class Image(BaseModel):
 
 
 class Audio(BaseModel):
-    """Represents an audio that can be loaded from a URL or file path."""
+    """Represents an audio that can be loaded from a URL, Google Cloud Storage URI, or file path."""
 
-    source: Union[str, Path] = Field(description="URL or file path of the audio")  # noqa: UP007
-    data: Union[str, None] = Field(  # noqa: UP007
+    source: str | Path = Field(description="URL, GCS URI, or file path of the audio")  # noqa: UP007
+    data: str | None = Field(  # noqa: UP007
         None, description="Base64 encoded audio data", repr=False
     )
-    media_type: str = Field(description="MIME type of the audio")
+    media_type: str | None = Field(None, description="MIME type of the audio")
 
     @classmethod
     def from_url(cls, url: str) -> Audio:
-        """Create an Audio instance from a URL."""
+        """Create an Audio instance from a URL (supports http://, https://, gs://, and GenAI file URIs)."""
+        if "https://generativelanguage.googleapis.com/v1beta/files/" in url:
+            return cls(source=url, data=None, media_type=None)
+
+        if url.startswith("gs://"):
+            return cls.from_gs_url(url)
+
         response = requests.get(url)
         content_type = response.headers.get("content-type")
-        assert content_type in VALID_AUDIO_MIME_TYPES, (
-            f"Invalid audio format. Must be one of: {', '.join(VALID_AUDIO_MIME_TYPES)}"
-        )
+        if not content_type or content_type not in VALID_AUDIO_MIME_TYPES:
+            raise ValueError(
+                f"Invalid or unsupported audio format. Must be one of: {', '.join(VALID_AUDIO_MIME_TYPES)}"
+            )
 
         data = base64.b64encode(response.content).decode("utf-8")
         return cls(source=url, data=data, media_type=content_type)
@@ -318,9 +325,10 @@ class Audio(BaseModel):
     def from_path(cls, path: Union[str, Path]) -> Audio:  # noqa: UP007
         """Create an Audio instance from a file path."""
         path = Path(path)
-        assert path.is_file(), f"Audio file not found: {path}"
+        if not path.is_file():
+            raise FileNotFoundError(f"Audio file not found: {path}")
 
-        mime_type = mimetypes.guess_type(str(path))[0]
+        mime_type, _ = mimetypes.guess_type(str(path))
 
         if mime_type == "audio/x-wav":
             mime_type = "audio/wav"
@@ -330,12 +338,48 @@ class Audio(BaseModel):
         ):  # <--- this is the case for aac audio files in Windows
             mime_type = "audio/aac"
 
-        assert mime_type in VALID_AUDIO_MIME_TYPES, (
-            f"Invalid audio format. Must be one of: {', '.join(VALID_AUDIO_MIME_TYPES)}"
-        )
+        if not mime_type or mime_type not in VALID_AUDIO_MIME_TYPES:
+            raise ValueError(
+                f"Invalid or unsupported audio format. Must be one of: {', '.join(VALID_AUDIO_MIME_TYPES)}"
+            )
 
         data = base64.b64encode(path.read_bytes()).decode("utf-8")
         return cls(source=str(path), data=data, media_type=mime_type)
+
+    @classmethod
+    def from_gs_url(cls, data_uri: str) -> Audio:
+        """Create an Audio instance from a Google Cloud Storage URL.
+
+        This method fetches the content from GCS and validates it, as required
+        by the GenAI API which expects the data to be pre-populated.
+
+        Args:
+            data_uri: The GCS URL (must start with gs://)
+
+        Returns:
+            Audio: Audio instance with fetched and validated content
+
+        Raises:
+            ValueError: If URL format is invalid, content is inaccessible, or format is unsupported
+        """
+        if not data_uri.startswith("gs://"):
+            raise ValueError("URL must start with gs://")
+
+        # Convert gs:// to public HTTPS URL
+        public_url = f"https://storage.googleapis.com/{data_uri[5:]}"
+
+        try:
+            response = requests.get(public_url)
+            response.raise_for_status()
+            content_type = response.headers.get("content-type")
+
+            if not content_type or content_type not in VALID_AUDIO_MIME_TYPES:
+                raise ValueError(f"Unsupported audio format: {content_type}")
+
+            data = base64.b64encode(response.content).decode("utf-8")
+            return cls(source=data_uri, media_type=content_type, data=data)
+        except requests.RequestException as e:
+            raise ValueError(f"We only support public audio files for now") from e
 
     def to_openai(self, mode: Mode) -> dict[str, Any]:
         """Convert the Audio instance to OpenAI's API format."""
@@ -361,10 +405,62 @@ class Audio(BaseModel):
                 "google-genai package is required for GenAI integration. Install with: pip install google-genai"
             ) from err
 
-        return types.Part.from_bytes(
-            data=base64.b64decode(self.data),  # type: ignore
-            mime_type=self.media_type,
-        )
+        if (
+            isinstance(self.source, str)
+            and "https://generativelanguage.googleapis.com/v1beta/files/" in self.source
+        ):
+            media_type = self.media_type
+            if not media_type:
+                try:
+                    from google.genai import Client
+
+                    file_name = "files/" + self.source.split("/files/")[1]
+                    client = Client()
+                    file = client.files.get(name=file_name)
+                    media_type = file.mime_type
+                except Exception as e:
+                    raise ValueError(
+                        f"Failed to retrieve metadata for GenAI file URI: {self.source}"
+                    ) from e
+
+            if not media_type or media_type not in VALID_AUDIO_MIME_TYPES:
+                raise ValueError(
+                    f"Could not determine or unsupported mime type for GenAI file URI: {self.source}"
+                )
+
+            return types.Part.from_uri(
+                file_uri=self.source,
+                mime_type=media_type,
+            )
+
+        # Handle Google Cloud Storage URIs that might not have pre-loaded data
+        if (
+            isinstance(self.source, str)
+            and self.source.startswith("gs://")
+            and not self.data
+        ):
+            # Convert GCS URI to public URL and fetch content
+            public_url = f"https://storage.googleapis.com/{self.source[5:]}"
+            try:
+                response = requests.get(public_url)
+                response.raise_for_status()
+                return types.Part.from_bytes(
+                    data=response.content,
+                    mime_type=self.media_type,
+                )
+            except requests.RequestException as e:
+                raise ValueError(
+                    f"Failed to fetch audio from GCS URI: {self.source}"
+                ) from e
+
+        # Handle pre-loaded data (normal case)
+        if self.data:
+            return types.Part.from_bytes(
+                data=base64.b64decode(self.data),  # type: ignore
+                mime_type=self.media_type,
+            )
+
+        raise ValueError("Audio data is missing for GenAI conversion")
 
 
 class ImageWithCacheControl(Image):

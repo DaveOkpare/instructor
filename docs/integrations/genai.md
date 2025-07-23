@@ -333,7 +333,7 @@ print(response)
 
 Instructor makes it easy to analyse and extract semantic information from Audio files using the Gemini series of models. Let's see an example below with the sample Audio file above where we'll load it in using our `from_url` method.
 
-Note that we support local files and base64 strings too with the `from_path`
+Note that we support local files, base64 strings, and Google Cloud Storage URIs too with the `from_path` and `from_url` methods
 
 ```python
 from instructor.processing.multimodal import Audio
@@ -364,6 +364,8 @@ response = client.chat.completions.create(
                 Audio.from_url(url),
                 # Option 2: Local file
                 # Audio.from_path("path/to/local/audio.mp3")
+                # Option 3: Google Cloud Storage URI
+                # Audio.from_url("gs://cloud-samples-data/speech/brooklyn_bridge.flac")
             ],
         },
     ],
