@@ -418,6 +418,8 @@ class PDF(BaseModel):
                 return cls.from_base64(source)
             elif source.startswith(("http://", "https://")):
                 return cls.from_url(source)
+            elif source.startswith("gs://"):
+                return cls.from_url(source)
 
             try:
                 if Path(source).is_file():
@@ -600,6 +602,26 @@ class PDF(BaseModel):
             raise ImportError(
                 "google-genai package is required for GenAI integration. Install with: pip install google-genai"
             ) from err
+
+        # Handle Google Cloud Storage URIs
+        if (
+            isinstance(self.source, str)
+            and self.source.startswith("gs://")
+            and not self.data
+        ):
+            # Convert GCS URI to public URL and fetch content
+            public_url = f"https://storage.googleapis.com/{self.source[5:]}"
+            try:
+                response = requests.get(public_url)
+                response.raise_for_status()
+                return types.Part.from_bytes(
+                    data=response.content,
+                    mime_type=self.media_type,
+                )
+            except requests.RequestException as e:
+                raise ValueError(
+                    f"Failed to fetch PDF from GCS URI: {self.source}"
+                ) from e
 
         if (
             isinstance(self.source, str)
