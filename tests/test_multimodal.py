@@ -1,6 +1,11 @@
 import pytest
 from pathlib import Path
-from instructor.processing.multimodal import Image, convert_contents, convert_messages
+from instructor.processing.multimodal import (
+    Image,
+    Audio,
+    convert_contents,
+    convert_messages,
+)
 from instructor.mode import Mode
 from unittest.mock import patch, MagicMock
 import instructor
@@ -374,3 +379,53 @@ def test_raw_base64_autodetect_png(base64_png):
     image = Image.autodetect(raw_base_64)
     assert image.media_type == "image/png"
     assert image.source == image.data == raw_base_64
+
+
+@patch("requests.get")
+def test_audio_from_url(mock_get):
+    url = "http://example.com/audio.mp3"
+    mock_response = MagicMock()
+    mock_response.headers.get.return_value = "audio/mpeg"
+    mock_response.content = b"fake audio data"
+    mock_get.return_value = mock_response
+
+    audio = Audio.from_url(url)
+    assert audio.source == url
+    assert audio.media_type == "audio/mpeg"
+    assert audio.data == "ZmFrZSBhdWRpbyBkYXRh"  # base64 of 'fake audio data'
+    mock_get.assert_called_once_with(url)
+
+
+def test_audio_from_path(tmp_path: Path):
+    audio_path = tmp_path / "test_audio.wav"
+    audio_path.write_bytes(b"fake audio data")
+
+    audio = Audio.from_path(audio_path)
+    assert audio.source == str(audio_path)
+    assert audio.media_type == "audio/wav"
+    assert audio.data is not None
+
+
+def test_audio_from_genai_url():
+    url = "https://generativelanguage.googleapis.com/v1beta/files/file123"
+    audio = Audio.from_url(url)
+    assert audio.source == url
+    assert audio.media_type is None  # Lazily fetched
+    assert audio.data is None
+
+
+@patch("google.genai.types")
+@patch("google.genai.Client")
+def test_audio_to_genai_with_uri(MockClient, mock_types):
+    url = "https://generativelanguage.googleapis.com/v1beta/files/file123"
+    mock_file = MagicMock()
+    mock_file.mime_type = "audio/mp3"
+    mock_client_instance = MockClient.return_value
+    mock_client_instance.files.get.return_value = mock_file
+
+    audio = Audio.from_url(url)
+    audio.to_genai()
+
+    mock_types.Part.from_uri.assert_called_once_with(
+        file_uri=url, mime_type="audio/mp3"
+    )
