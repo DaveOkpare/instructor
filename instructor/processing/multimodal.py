@@ -84,10 +84,8 @@ class Image(BaseModel):
 
             return cls.from_raw_base64(source)
 
-        if isinstance(source, Path):
+        elif isinstance(source, Path):
             return cls.from_path(source)
-
-        raise ValueError("Unable to determine image type or unsupported image format")
 
     @classmethod
     def autodetect_safely(cls, source: Union[str, Path]) -> Union[Image, str]:  # noqa: UP007
@@ -434,8 +432,6 @@ class PDF(BaseModel):
             return cls.from_raw_base64(source)
         elif isinstance(source, Path):
             return cls.from_path(source)
-
-        raise ValueError("Unable to determine PDF type or unsupported PDF format")
 
     @classmethod
     def is_base64(cls, s: str) -> bool:
