@@ -168,6 +168,9 @@ class Image(BaseModel):
         if cls.is_base64(url):
             return cls.from_base64(url)
 
+        if url.startswith("gs://"):
+            return cls.from_gs_url(url)
+
         parsed_url = urlparse(url)
         media_type, _ = mimetypes.guess_type(parsed_url.path)
 
