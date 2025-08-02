@@ -284,8 +284,9 @@ class OpenAISchema(BaseModel):
         )
 
         assert function_call.name == cls.openai_schema["name"]
-        return cls.model_validate(
-            obj=function_call.args, context=validation_context, strict=strict
+        # Convert to JSON and back to handle string-to-enum conversion properly
+        return cls.model_validate_json(
+            json.dumps(function_call.args), context=validation_context, strict=strict
         )
 
     @classmethod
