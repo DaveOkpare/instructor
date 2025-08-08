@@ -1,3 +1,5 @@
+import enum
+import json
 from typing import TypeVar
 import pytest
 from anthropic.types import Message, Usage
@@ -314,3 +316,47 @@ def test_missing_refusal_attribute(test_model: type[OpenAISchema]):
     resp = test_model.from_response(completion, mode=instructor.Mode.TOOLS)
     assert resp.data == "test_data"
     assert resp.name == "TestModel"
+
+
+class TestEnum(enum.Enum):
+    FAST = "FAST"
+    SLOW = "SLOW"
+
+
+class GENAIEnumModel(OpenAISchema):
+    name: str = "GENAIEnumModel"
+    mode: TestEnum
+    threshold: float
+
+
+def _tools_completion(args: dict) -> ChatCompletion:
+    a = json.dumps(args)
+    tc = ChatCompletionMessageToolCall(
+        id="t1", type="function", function=Function(name="GENAIEnumModel", arguments=a)
+    )
+    msg = ChatCompletionMessage(role="assistant", content=None, tool_calls=[tc])
+    return ChatCompletion(
+        id="c1",
+        created=0,
+        model="gpt-4o-mini",
+        object="chat.completion",
+        choices=[Choice(index=0, message=msg, finish_reason="stop", logprobs=None)],
+    )
+
+
+def test_enum_string_strict_is_accepted():
+    out = GENAIEnumModel.from_response(
+        _tools_completion({"mode": "FAST", "threshold": 0.8}),
+        mode=instructor.Mode.TOOLS,
+        strict=True,
+    )
+    assert out.mode is TestEnum.FAST and out.threshold == 0.8
+
+
+def test_invalid_enum_string_strict_raises():
+    with pytest.raises(ValidationError):
+        GENAIEnumModel.from_response(
+            _tools_completion({"mode": "TURBO", "threshold": 0.5}),
+            mode=instructor.Mode.TOOLS,
+            strict=True,
+        )
