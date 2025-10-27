@@ -37,7 +37,11 @@ def test_update_genai_kwargs_safety_settings():
     supported_categories = [
         c
         for c in HarmCategory
-        if c != HarmCategory.HARM_CATEGORY_UNSPECIFIED
+        if c
+        not in (
+            HarmCategory.HARM_CATEGORY_UNSPECIFIED,
+            HarmCategory.HARM_CATEGORY_JAILBREAK,
+        )
         and not c.name.startswith("HARM_CATEGORY_IMAGE_")
     ]
 
@@ -68,7 +72,11 @@ def test_update_genai_kwargs_with_custom_safety_settings():
     supported_categories = [
         c
         for c in HarmCategory
-        if c != HarmCategory.HARM_CATEGORY_UNSPECIFIED
+        if c
+        not in (
+            HarmCategory.HARM_CATEGORY_UNSPECIFIED,
+            HarmCategory.HARM_CATEGORY_JAILBREAK,
+        )
         and not c.name.startswith("HARM_CATEGORY_IMAGE_")
     ]
 

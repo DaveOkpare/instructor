@@ -251,7 +251,11 @@ def update_genai_kwargs(
     supported_categories = [
         c
         for c in HarmCategory
-        if c != HarmCategory.HARM_CATEGORY_UNSPECIFIED
+        if c
+        not in (
+            HarmCategory.HARM_CATEGORY_UNSPECIFIED,
+            HarmCategory.HARM_CATEGORY_JAILBREAK,
+        )
         and not c.name.startswith("HARM_CATEGORY_IMAGE_")
     ]
 
